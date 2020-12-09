@@ -1,6 +1,6 @@
 # PyNetMHCpan
 
-A simple tool for using NetMHCpan and NetMHCIIpan in a Python environment.
+A simple tool for using NetMHCpan and NetMHCIIpan using multiple CPUs in a Python environment.
 
 For more information on NetMHCpan and NetMHCIIpan see the following:
 - https://services.healthtech.dtu.dk/service.php?NetMHCpan-4.1
