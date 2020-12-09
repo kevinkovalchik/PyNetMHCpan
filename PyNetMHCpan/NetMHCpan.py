@@ -58,7 +58,7 @@ def remove_modifications(peptide_list, verbose=False):
     return unmodified_peps
 
 
-class MhcToolHelper:
+class Helper:
     """
     example usage:
     cl_tools.make_binding_prediction_jobs()
