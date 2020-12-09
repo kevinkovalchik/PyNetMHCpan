@@ -71,12 +71,30 @@ class MhcToolHelper:
                  mhc_class: str = 'I',
                  alleles: List[str] = ('HLA-A03:02', 'HLA-A02:02'),
                  min_length: int = 8,
-                 max_length: int = 12,
+                 max_length: int = 30,
                  netmhcpan_version: float = 4.1,
                  netmhcpan_executable: str = "netMHCpan",
                  netmhc2pan_executable: str = "netMHCIIpan",
                  n_threads: int = 0,
                  output_dir: str = None):
+        """
+        Helper class to run NetMHCpan or NetMHCIIpan on multiple CPUs from Python.
+
+        :param peptides: A list of peptides.
+        :param mhc_class: The MHC class of the peptides (i.e. I or II)
+        :param alleles: A list of NetMHCpan- or NetMHCIIpan-recognized alleles.
+        :param min_length: The minimum peptide length which will be analyzed. Minimum possible values are
+        8 for class I and 9 for class II.
+        :param max_length: The maximum peptide length to analyze.
+        :param netmhcpan_version: What version of NetMHCpan is being used. Option are 4.0 and 4.1.
+        :param netmhcpan_executable: Location of the NetMHCpan execution script. The default value assumes it is
+        in your PATH.
+        :param netmhc2pan_executable: Location of the NetMHCIIpan execution script. The default value assumes it is
+        in your PATH.
+        :param n_threads: The number of threads to use
+        :param output_dir: The output or temp directory. If you are going to use the analysis results programmatically
+        and don't need the output files you can set this to something like /temp/netmhcpan
+        """
 
         if mhc_class == 'I' and min_length < 8:
             raise ValueError('Class I peptides must be 8 mers and longer for NetMHCpan')
