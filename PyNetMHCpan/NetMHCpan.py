@@ -105,11 +105,6 @@ class Helper:
         and don't need the output files you can set this to something like /temp/netmhcpan
         """
 
-        if mhc_class == 'I' and min_length < 8:
-            raise ValueError('Class I peptides must be 8 mers and longer for NetMHCpan')
-        if mhc_class == 'II' and min_length < 9:
-            raise ValueError('Class II peptides must be 9 mers and longer for NetMHCIIpan')
-
         config = ConfigParser()
         config.read(config_file)
 
@@ -142,7 +137,8 @@ class Helper:
             self.n_threads = n_threads
         self.jobs = []
 
-        if (not Path(self.NETMHCPAN).is_file()) or (not Path(self.NETMHCIIPAN).is_file()):
+        if (self.mhc_class == 'I' and not Path(self.NETMHCPAN).is_file()) or \
+                (self.mhc_class == 'II' and not Path(self.NETMHCIIPAN).is_file()):
             print("It looks like there is a problem with the configuration. Please review the "
                   "following and update as necessary:")
             self.update_config()
@@ -209,6 +205,9 @@ class Helper:
         peptides = np.array(self.peptides)
         lengths = np.vectorize(len)(peptides)
         peptides = peptides[(lengths >= self.min_length) & (lengths <= self.max_length)]
+        if len(peptides) < len(self.peptides):
+            print(f'{len(self.peptides)-len(peptides)} peptides were outside the length restrictions and '
+                  f'were removed from the peptide list.')
         np.random.shuffle(peptides)  # we need to shuffle them so we don't end up with files filled with peptide lengths that take a LONG time to compute (this actually is a very significant speed up)
 
         if len(peptides) > 100:
