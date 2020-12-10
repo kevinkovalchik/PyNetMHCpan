@@ -143,11 +143,13 @@ class Helper:
         self.jobs = []
 
     def add_peptides(self, peptides: List[str]):
+        if not self.peptides:
+            self.peptides = []
         peptides = remove_previous_and_next_aa(peptides)
         peptides = remove_modifications(peptides)
         self.peptides += peptides
 
-    def make_binding_prediction_jobs(self):
+    def _make_binding_prediction_jobs(self):
         if not self.peptides:
             print("ERROR: You need to add some peptides first!")
             return
@@ -180,21 +182,21 @@ class Helper:
             self.jobs.append(job)
             job_number += 1
 
-    def run_jobs(self):
+    def _run_jobs(self):
         self.jobs = _run_multiple_processes(self.jobs, n_processes=self.n_threads)
 
-    def clear_jobs(self):
+    def _clear_jobs(self):
         self.jobs = []
 
-    def aggregate_netmhcpan_results(self):
+    def _aggregate_netmhcpan_results(self):
         for job in self.jobs:
-            self.parse_netmhc_output(job.stdout.decode())
+            self._parse_netmhc_output(job.stdout.decode())
 
         self.predictions.to_csv(str(Path(self.wd) / f'netMHC'
                                                           f'{"II" if self.mhc_class == "II" else ""}'
                                                           f'pan_predictions.csv'))
 
-    def parse_netmhc_output(self, stdout: str):
+    def _parse_netmhc_output(self, stdout: str):
         rows = []
         lines = stdout.split('\n')
         if self.mhc_class == 'I':  # works for 4.0 and 4.1, will need to keep an eye on future releases
@@ -235,8 +237,8 @@ class Helper:
         if len(rows) == 0:
             print(stdout)
 
-    def get_predictions(self):
-        self.make_binding_prediction_jobs()
-        self.run_jobs()
-        self.aggregate_netmhcpan_results()
-        self.clear_jobs()
+    def make_predictions(self):
+        self._make_binding_prediction_jobs()
+        self._run_jobs()
+        self._aggregate_netmhcpan_results()
+        self._clear_jobs()
