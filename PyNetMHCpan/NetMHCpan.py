@@ -8,6 +8,11 @@ from pathlib import Path
 from typing import List, Union
 from multiprocessing import Pool
 from datetime import datetime
+from configparser import ConfigParser
+
+
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+config_file = str(Path(ROOT_DIR)/'pynetmhcpan.config')
 
 
 class Job:
@@ -48,14 +53,21 @@ def _run_multiple_processes(jobs: List[Job], n_processes: int):
     return returns
 
 
-def remove_modifications(peptide_list, verbose=False):
+def remove_modifications(peptide_list):
     unmodified_peps = []
-    if verbose:
-        print('Removing peptide modifications')
     for pep in peptide_list:
-        pep = ''.join(re.findall('[a-zA-z]+', pep))
+        pep = ''.join(re.findall('[a-zA-Z]+', pep))
         unmodified_peps.append(pep)
     return unmodified_peps
+
+
+def remove_previous_and_next_aa(peptide_list):
+    for i in range(len(peptide_list)):
+        if peptide_list[i][1] == '.':
+            peptide_list[i] = peptide_list[i][2:]
+        if peptide_list[i][-2] == '.':
+            peptide_list[i] = peptide_list[i][:-2]
+    return peptide_list
 
 
 class Helper:
@@ -67,14 +79,11 @@ class Helper:
     cl_tools.clear_jobs()
     """
     def __init__(self,
-                 peptides: List[str],
+                 peptides: List[str] = None,
                  mhc_class: str = 'I',
                  alleles: List[str] = ('HLA-A03:02', 'HLA-A02:02'),
                  min_length: int = 8,
                  max_length: int = 30,
-                 netmhcpan_version: float = 4.1,
-                 netmhcpan_executable: str = "netMHCpan",
-                 netmhc2pan_executable: str = "netMHCIIpan",
                  n_threads: int = 0,
                  output_dir: str = None):
         """
@@ -101,9 +110,11 @@ class Helper:
         if mhc_class == 'II' and min_length < 9:
             raise ValueError('Class II peptides must be 9 mers and longer for NetMHCIIpan')
 
-        self.NETMHCPAN = netmhcpan_executable
-        self.NETMHCIIPAN = netmhc2pan_executable
-        self.NETMHCPAN_VERSION = netmhcpan_version
+        config = ConfigParser()
+        config.read(config_file)
+
+        self.NETMHCPAN = config['PATHS']['NetMHCpan']
+        self.NETMHCIIPAN = config['PATHS']['NetMHCIIpan']
 
         if isinstance(alleles, str):
             if ',' in alleles:
@@ -120,7 +131,7 @@ class Helper:
         self.predictions = pd.DataFrame(
             columns=['Peptide', 'Allele', 'Rank', 'Binder']
         )
-        self.wd = Path(output_dir) if output_dir else os.getcwd()
+        self.wd = Path(output_dir) if output_dir else Path(os.getcwd())
         if not self.wd.exists():
             self.wd.mkdir(parents=True)
         self.predictions_made = False
@@ -131,13 +142,18 @@ class Helper:
             self.n_threads = n_threads
         self.jobs = []
 
-        with open(str(self.wd / 'all_peptides.tsv'), 'w') as f:
-            for pep in peptides:
-                f.write(pep + '\n')
+    def add_peptides(self, peptides: List[str]):
+        peptides = remove_previous_and_next_aa(peptides)
+        peptides = remove_modifications(peptides)
+        self.peptides += peptides
 
     def make_binding_prediction_jobs(self):
+        if not self.peptides:
+            print("ERROR: You need to add some peptides first!")
+            return
+
         # split peptide list into chunks
-        peptides = np.array(remove_modifications(self.peptides))
+        peptides = np.array(self.peptides)
         lengths = np.vectorize(len)(peptides)
         peptides = peptides[(lengths >= self.min_length) & (lengths <= self.max_length)]
         np.random.shuffle(peptides)  # we need to shuffle them so we don't end up with files filled with peptide lengths that take a LONG time to compute (this actually is a very significant speed up)
@@ -147,7 +163,6 @@ class Helper:
         else:
             chunks = [peptides]
         job_number = 1
-        results = []
 
         for chunk in chunks:
             if len(chunk) < 1:
