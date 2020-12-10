@@ -142,6 +142,57 @@ class Helper:
             self.n_threads = n_threads
         self.jobs = []
 
+        if (not Path(self.NETMHCPAN).is_file()) or (not Path(self.NETMHCIIPAN).is_file()):
+            print("It looks like there is a problem with the configuration. Please review the "
+                  "following and update as necessary:")
+            self.update_config()
+
+    def update_config(self):
+        with open(config_file, 'r') as f:
+            config = f.readlines()
+
+        print('The current config settings are as follows:')
+        print()
+        for line in config:
+            print(f' {line}', end='')
+        print()
+        netmhcpan = input('To update the path to the NetMHCpan script type 1 and press enter '
+                          '(any other key to skip): ')
+
+        if netmhcpan == '1':
+            new_netmhcpan = input('Type the new path to the NetMHCpan execution script and press enter: ')
+        else:
+            netmhcpan = None
+            new_netmhcpan = None
+        netmhc2pan = input('To update the path to the NetMHCIIpan script type 2 and press enter '
+                           '(any other key to skip): ')
+        if netmhc2pan == '2':
+            new_netmhc2pan = input('Type the new path to the NetMHCIIpan execution script and press enter: ')
+        else:
+            netmhc2pan = None
+            new_netmhc2pan = None
+
+        if netmhcpan or netmhc2pan:
+            config = ConfigParser()
+            config.read(config_file)
+
+            with open(config_file, 'w') as f:
+                f.write('[PATHS]\n')
+                if netmhcpan:
+                    f.write(f'NetMHCpan = {new_netmhcpan}\n')
+                else:
+                    f.write(f'NetMHCpan = {config["PATHS"]["NetMHCpan"]}\n')
+                if netmhc2pan:
+                    f.write(f'NetMHCIIpan = {new_netmhc2pan}\n')
+                else:
+                    f.write(f'NetMHCIIpan = {config["PATHS"]["NetMHCIIpan"]}\n')
+
+            config = ConfigParser()
+            config.read(config_file)
+            # update the paths
+            self.NETMHCPAN = config['PATHS']['NetMHCpan']
+            self.NETMHCIIPAN = config['PATHS']['NetMHCIIpan']
+
     def add_peptides(self, peptides: List[str]):
         if not self.peptides:
             self.peptides = []
