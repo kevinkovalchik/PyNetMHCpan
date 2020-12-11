@@ -1,10 +1,11 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='PyNetMHCpan',
-    version='0.1.2',
-    packages=['PyNetMHCpan'],
+    version='0.1.3',
+    packages=find_packages(),
     url='https://github.com/kevinkovalchik/PyNetMHCpan',
+    python_requires='>=3.7',
     license='MIT',
     author='Kevin Kovalchik',
     include_package_data=True,
