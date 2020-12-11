@@ -13,7 +13,7 @@ from configparser import ConfigParser
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 config_file = str(Path(ROOT_DIR)/'pynetmhcpan.config')
-
+common_aa = "ARNDCQEGHILKMFPSTWYV"
 
 class Job:
     def __init__(self,
@@ -53,21 +53,47 @@ def _run_multiple_processes(jobs: List[Job], n_processes: int):
     return returns
 
 
-def remove_modifications(peptide_list):
+def remove_modifications(peptides: Union[List[str], str]):
+    if isinstance(peptides, str):
+        return ''.join(re.findall('[a-zA-Z]+', peptides))
     unmodified_peps = []
-    for pep in peptide_list:
+    for pep in peptides:
         pep = ''.join(re.findall('[a-zA-Z]+', pep))
         unmodified_peps.append(pep)
     return unmodified_peps
 
 
-def remove_previous_and_next_aa(peptide_list):
+def remove_previous_and_next_aa(peptides: Union[List[str], str]):
+    return_one = False
+    if isinstance(peptides, str):
+        peptides = [peptides]
+        return_one = True
+    for i in range(len(peptides)):
+        if peptides[i][1] == '.':
+            peptides[i] = peptides[i][2:]
+        if peptides[i][-2] == '.':
+            peptides[i] = peptides[i][:-2]
+    if return_one:
+        return peptides[0]
+    return peptides
+
+
+def replace_uncommon_aas(peptide):
+    pep = peptide
+    for aa in peptide:
+        if aa not in common_aa:
+            pep = pep.replace(aa, 'X')
+    return pep
+
+
+def create_netmhcpan_peptide_index(peptide_list):
+    netmhcpan_peps = {}
     for i in range(len(peptide_list)):
-        if peptide_list[i][1] == '.':
-            peptide_list[i] = peptide_list[i][2:]
-        if peptide_list[i][-2] == '.':
-            peptide_list[i] = peptide_list[i][:-2]
-    return peptide_list
+        if len(peptide_list[i]) < 1:
+            continue
+        netmhc_pep = replace_uncommon_aas(peptide_list[i])
+        netmhcpan_peps[peptide_list[i]] = netmhc_pep
+    return netmhcpan_peps
 
 
 class Helper:
@@ -82,8 +108,6 @@ class Helper:
                  peptides: List[str] = None,
                  mhc_class: str = 'I',
                  alleles: List[str] = ('HLA-A03:02', 'HLA-A02:02'),
-                 min_length: int = 8,
-                 max_length: int = 30,
                  n_threads: int = 0,
                  output_dir: str = None):
         """
@@ -120,9 +144,9 @@ class Helper:
                 alleles = [alleles]
         self.alleles = alleles
         self.mhc_class = mhc_class
-        self.min_length = min_length
-        self.max_length = max_length
+        self.min_length = 8 if self.mhc_class == 'I' else 9
         self.peptides = peptides
+        self.netmhcpan_peptides = dict()
         self.predictions = pd.DataFrame(
             columns=['Peptide', 'Allele', 'Rank', 'Binder']
         )
@@ -194,7 +218,14 @@ class Helper:
             self.peptides = []
         peptides = remove_previous_and_next_aa(peptides)
         peptides = remove_modifications(peptides)
-        self.peptides += peptides
+        use_peptides = [x for x in peptides if len(x) >= self.min_length]
+        self.peptides += use_peptides
+
+        if len(use_peptides) < len(peptides):
+            print(f'{len(peptides)-len(use_peptides)} peptides were outside the length restrictions and '
+                  f'were removed from the peptide list.')
+
+        self.netmhcpan_peptides = create_netmhcpan_peptide_index(self.peptides)
 
     def _make_binding_prediction_jobs(self):
         if not self.peptides:
@@ -202,12 +233,7 @@ class Helper:
             return
 
         # split peptide list into chunks
-        peptides = np.array(self.peptides)
-        lengths = np.vectorize(len)(peptides)
-        peptides = peptides[(lengths >= self.min_length) & (lengths <= self.max_length)]
-        if len(peptides) < len(self.peptides):
-            print(f'{len(self.peptides)-len(peptides)} peptides were outside the length restrictions and '
-                  f'were removed from the peptide list.')
+        peptides = np.array(list(self.netmhcpan_peptides.values()))
         np.random.shuffle(peptides)  # we need to shuffle them so we don't end up with files filled with peptide lengths that take a LONG time to compute (this actually is a very significant speed up)
 
         if len(peptides) > 100:
@@ -292,3 +318,52 @@ class Helper:
         self._run_jobs()
         self._aggregate_netmhcpan_results()
         self._clear_jobs()
+
+    def annotate_file(self, filename: str,
+                      peptide_column: str = 'Peptide',
+                      delimiter: str = '\t'):
+
+        # clear the peptide list
+        self.peptides = []
+
+        with open(filename, 'r') as f:
+            header = f.readline().strip().split(delimiter)
+            content = [x.strip().split(delimiter) for x in f.readlines()]
+        pep_index = header.index(peptide_column)
+        peptides = [x[pep_index] for x in content]
+        self.add_peptides(peptides)
+        self.make_predictions()
+        binding = {p: {} for p in self.predictions['Peptide'].unique()}
+        for i in self.predictions.index:
+            pep, allele, rank, binder = self.predictions.loc[i, :]
+            binding[pep][allele] = rank
+
+        alleles = self.predictions['Allele'].unique()
+        new_content = []
+
+        for allele in alleles:
+            header.insert(pep_index-1, f'{allele}_rank')
+        #header.insert(pep_index - 1, 'combined_allele_rank')
+        for line in content:
+            pep = replace_uncommon_aas(remove_modifications(remove_previous_and_next_aa(line[pep_index])))
+            # pep = self.netmhcpan_peptides[pep]
+            if len(pep) < self.min_length:
+                continue
+            ranks = []
+            for allele in alleles:
+                rank = float(binding[pep][allele])
+                #line.insert(pep_index-1, str(np.log(rank)))
+                line.insert(pep_index - 1, str(rank))
+                ranks.append(rank)
+            #combined_rank = np.prod(np.log(ranks))
+            #line.insert(pep_index - 1, str(combined_rank))
+            new_content.append(line)
+
+        f_out = Path(filename).parent / (Path(filename).stem + '_annotated.tsv')
+        with open(f_out, 'w') as f:
+            f.write('\t'.join(header) + '\n')
+            for line in new_content:
+                f.write('\t'.join(line) + '\n')
+
+
+
