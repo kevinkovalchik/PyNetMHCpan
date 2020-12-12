@@ -9,6 +9,7 @@ from typing import List, Union
 from multiprocessing import Pool
 from datetime import datetime
 from configparser import ConfigParser
+from uuid import uuid4
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -109,6 +110,7 @@ class Helper:
                  mhc_class: str = 'I',
                  alleles: List[str] = ('HLA-A03:02', 'HLA-A02:02'),
                  n_threads: int = 0,
+                 tmp_dir: str = '/tmp',
                  output_dir: str = None):
         """
         Helper class to run NetMHCpan or NetMHCIIpan on multiple CPUs from Python.
@@ -151,7 +153,10 @@ class Helper:
             columns=['Peptide', 'Allele', 'Rank', 'Binder']
         )
         self.wd = Path(output_dir) if output_dir else Path(os.getcwd())
+        self.temp_dir = Path(tmp_dir) / 'PyNetMHCpan'
         if not self.wd.exists():
+            self.wd.mkdir(parents=True)
+        if not self.temp_dir.exists():
             self.wd.mkdir(parents=True)
         self.predictions_made = False
         self.not_enough_peptides = []
@@ -231,6 +236,7 @@ class Helper:
         if not self.peptides:
             print("ERROR: You need to add some peptides first!")
             return
+        self.jobs = []
 
         # split peptide list into chunks
         peptides = np.array(list(self.netmhcpan_peptides.values()))
@@ -245,7 +251,7 @@ class Helper:
         for chunk in chunks:
             if len(chunk) < 1:
                 continue
-            fname = Path(self.wd, f'peplist_{job_number}.csv')
+            fname = Path(self.temp_dir, f'peplist_{job_number}.csv')
             # save the new peptide list, this will be given to netMHCpan
             chunk.tofile(str(fname), '\n', '%s')
             # run netMHCpan
@@ -254,7 +260,7 @@ class Helper:
             else:
                 command = f'{self.NETMHCIIPAN} -inptype 1 -f {fname} -a {",".join(self.alleles)}'.split(' ')
             job = Job(command=command,
-                      working_directory=self.wd)
+                      working_directory=self.temp_dir)
             self.jobs.append(job)
             job_number += 1
 
@@ -268,7 +274,7 @@ class Helper:
         for job in self.jobs:
             self._parse_netmhc_output(job.stdout.decode())
 
-        self.predictions.to_csv(str(Path(self.wd) / f'netMHC'
+        self.predictions.to_csv(str(Path(self.temp_dir) / f'netMHC'
                                                           f'{"II" if self.mhc_class == "II" else ""}'
                                                           f'pan_predictions.csv'))
 
@@ -314,6 +320,7 @@ class Helper:
             print(stdout)
 
     def make_predictions(self):
+        self.temp_dir = self.temp_dir / str(uuid4())
         self._make_binding_prediction_jobs()
         self._run_jobs()
         self._aggregate_netmhcpan_results()
@@ -343,7 +350,6 @@ class Helper:
 
         for allele in alleles:
             header.insert(pep_index-1, f'{allele}_rank')
-        #header.insert(pep_index - 1, 'combined_allele_rank')
         for line in content:
             pep = replace_uncommon_aas(remove_modifications(remove_previous_and_next_aa(line[pep_index])))
             # pep = self.netmhcpan_peptides[pep]
@@ -355,11 +361,9 @@ class Helper:
                 #line.insert(pep_index-1, str(np.log(rank)))
                 line.insert(pep_index - 1, str(rank))
                 ranks.append(rank)
-            #combined_rank = np.prod(np.log(ranks))
-            #line.insert(pep_index - 1, str(combined_rank))
             new_content.append(line)
 
-        f_out = Path(filename).parent / (Path(filename).stem + '_annotated.tsv')
+        f_out = self.wd / (Path(filename).stem + '_annotated.tsv')
         with open(f_out, 'w') as f:
             f.write('\t'.join(header) + '\n')
             for line in new_content:
