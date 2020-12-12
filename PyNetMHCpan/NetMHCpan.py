@@ -321,6 +321,7 @@ class Helper:
 
     def make_predictions(self):
         self.temp_dir = self.temp_dir / str(uuid4())
+        self.temp_dir.mkdir(parents=True)
         self._make_binding_prediction_jobs()
         self._run_jobs()
         self._aggregate_netmhcpan_results()
