@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyNetMHCpan',
-    version='0.1.4',
+    version='0.1.5',
     packages=find_packages(),
     url='https://github.com/kevinkovalchik/PyNetMHCpan',
     python_requires='>=3.7',
