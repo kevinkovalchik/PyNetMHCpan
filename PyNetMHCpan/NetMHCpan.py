@@ -157,7 +157,7 @@ class Helper:
         if not self.wd.exists():
             self.wd.mkdir(parents=True)
         if not self.temp_dir.exists():
-            self.wd.mkdir(parents=True)
+            self.temp_dir.mkdir(parents=True)
         self.predictions_made = False
         self.not_enough_peptides = []
         if n_threads < 1 or n_threads > os.cpu_count():
