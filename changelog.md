@@ -2,6 +2,10 @@
 
 This changelog is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.1.5] 2020-12-14
+### Fixed
+- Wrong path was used to make temp directory.
+
 ## [0.1.4] 2020-12-12
 ### New
 - A unique temp directory is used for every analysis. This makes it possible to run multiple instances at once,
